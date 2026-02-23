@@ -468,6 +468,39 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+/* Featured game card - Buckshot Roulette */
+.game-card.featured {
+  border: 2px solid #ff9900;
+  background: linear-gradient(135deg, rgba(255, 153, 0, 0.05), rgba(255, 255, 255, 0.96));
+  box-shadow: 0 0 20px rgba(255, 153, 0, 0.15);
+  position: relative;
+}
+
+.game-card.featured::before {
+  content: '🔐 ZK';
+  position: absolute;
+  top: -10px;
+  right: 15px;
+  background: #ff9900;
+  color: #000;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.game-card.featured:not(:disabled):hover {
+  border-color: #ff9900;
+  box-shadow: 0 0 30px rgba(255, 153, 0, 0.3);
+}
+
+.game-card .featured-tag {
+  background: rgba(255, 153, 0, 0.2);
+  color: #cc7a00;
+  font-weight: 600;
+}
+
 .game-card:disabled {
   opacity: 0.5;
   cursor: not-allowed;

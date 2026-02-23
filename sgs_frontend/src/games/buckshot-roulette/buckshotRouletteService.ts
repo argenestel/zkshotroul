@@ -1,6 +1,7 @@
 import { Client as BuckshotRouletteClient, type Game } from './bindings';
 import { NETWORK_PASSPHRASE, RPC_URL, DEFAULT_METHOD_OPTIONS, DEFAULT_AUTH_TTL_MINUTES } from '@/utils/constants';
 import { contract } from '@stellar/stellar-sdk';
+import { Buffer } from 'buffer';
 import { signAndSendViaLaunchtube } from '@/utils/transactionHelper';
 import { calculateValidUntilLedger } from '@/utils/ledgerUtils';
 
@@ -44,6 +45,44 @@ export class BuckshotRouletteService {
     }
   }
 
+  // ZK Commit-Reveal Functions
+  
+  async commitSeed(
+    sessionId: number,
+    player: string,
+    commitment: Uint8Array,
+    signer: Signer
+  ): Promise<void> {
+    const client = this.createSigningClient(player, signer);
+    const tx = await client.commit_seed({
+      session_id: sessionId,
+      player,
+      commitment: Buffer.from(commitment),
+    }, DEFAULT_METHOD_OPTIONS);
+
+    const validUntilLedgerSeq = await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
+    await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
+  }
+
+  async revealSeed(
+    sessionId: number,
+    player: string,
+    seed: Uint8Array,
+    signer: Signer
+  ): Promise<void> {
+    const client = this.createSigningClient(player, signer);
+    const tx = await client.reveal_seed({
+      session_id: sessionId,
+      player,
+      seed: Buffer.from(seed),
+    }, DEFAULT_METHOD_OPTIONS);
+
+    const validUntilLedgerSeq = await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
+    await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
+  }
+
+  // Game Lifecycle Functions
+
   async createGame(
     sessionId: number,
     player1: string,
@@ -78,9 +117,9 @@ export class BuckshotRouletteService {
     await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
   }
 
-  async startGame(sessionId: number, caller: string, signer: Signer): Promise<void> {
+  async finalizeGameStart(sessionId: number, caller: string, signer: Signer): Promise<void> {
     const client = this.createSigningClient(caller, signer);
-    const tx = await client.start_game({ session_id: sessionId }, DEFAULT_METHOD_OPTIONS);
+    const tx = await client.finalize_game_start({ session_id: sessionId }, DEFAULT_METHOD_OPTIONS);
 
     const validUntilLedgerSeq = await calculateValidUntilLedger(RPC_URL, DEFAULT_AUTH_TTL_MINUTES);
     await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
@@ -111,17 +150,20 @@ export class BuckshotRouletteService {
     const sentTx = await signAndSendViaLaunchtube(tx, DEFAULT_METHOD_OPTIONS.timeoutInSeconds, validUntilLedgerSeq);
     return sentTx.result as boolean;
   }
-
-  async getShellCount(sessionId: number): Promise<number> {
-    const tx = await this.baseClient.get_shell_count({ session_id: sessionId });
-    const result = await tx.simulate();
-    if (result.result.isOk()) {
-      return result.result.unwrap() as number;
-    }
-    return 0;
-  }
 }
 
 export const buckshotRouletteService = new BuckshotRouletteService(
-  'CBUCOZAI3Z43CAGB4EX2XAMSVM3IMLIPKYABP7PPRTCV4EELVNHTGQT5'
+  'CBB2W6PK2UBPKSXCXG2S2R3VOS4ISV5HLJVFKNDMOUG6KABPJJ5JCJGJ'
 );
+
+// Helper to generate random seed and commitment
+export function generateZKSeed(): Uint8Array {
+  const seed = new Uint8Array(32);
+  crypto.getRandomValues(seed);
+  return seed;
+}
+
+export async function hashSeed(seed: Uint8Array): Promise<Uint8Array> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', seed.buffer as ArrayBuffer);
+  return new Uint8Array(hashBuffer);
+}

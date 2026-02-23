@@ -13,8 +13,9 @@ const games = [
     id: 'buckshot-roulette',
     title: 'Buckshot Roulette',
     emoji: '🔫',
-    description: 'High-stakes shotgun game. Live or blank? Choose wisely.',
-    tags: ['2 players', 'Risk strategy'],
+    description: 'High-stakes shotgun game with ZK commit-reveal for fair shell generation.',
+    tags: ['2 players', 'ZK Enabled', 'Featured'],
+    featured: true,
   },
   {
     id: 'twenty-one',
@@ -22,6 +23,7 @@ const games = [
     emoji: '🃏',
     description: 'Card strategy duel where close-to-21 wins without busting.',
     tags: ['2 players', 'Card strategy'],
+    featured: false,
   },
   {
     id: 'number-guess',
@@ -29,6 +31,7 @@ const games = [
     emoji: '🎯',
     description: 'Pick a number, lock it in, and reveal the closest guess.',
     tags: ['2 players', 'Fast rounds'],
+    featured: false,
   },
   {
     id: 'dice-duel',
@@ -36,6 +39,7 @@ const games = [
     emoji: '🎲',
     description: 'Roll two dice each and race for the highest total.',
     tags: ['2 players', 'Quick launch'],
+    featured: false,
   },
 ];
 
@@ -143,7 +147,7 @@ export function GamesCatalog({ onBack }: GamesCatalogProps) {
         {games.map((game, index) => (
           <button
             key={game.id}
-            className="game-card"
+            className={`game-card${game.featured ? ' featured' : ''}`}
             type="button"
             disabled={!isConnected}
             onClick={() => handleSelectGame(game.id)}
@@ -156,7 +160,7 @@ export function GamesCatalog({ onBack }: GamesCatalogProps) {
             <p className="game-description">{game.description}</p>
             <div className="game-tags">
               {game.tags.map((tag) => (
-                <span key={tag} className="game-tag">
+                <span key={tag} className={`game-tag${tag === 'ZK Enabled' || tag === 'Featured' ? ' featured-tag' : ''}`}>
                   {tag}
                 </span>
               ))}

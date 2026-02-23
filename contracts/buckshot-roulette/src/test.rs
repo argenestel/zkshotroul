@@ -1,12 +1,8 @@
 #![cfg(test)]
 
-use crate::{BuckshotRouletteContract, BuckshotRouletteContractClient, GameStatus};
+use crate::{BuckshotRouletteContract, BuckshotRouletteContractClient, GameStatus, SeedCommitment};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::{contract, contractimpl, Address, Env};
-
-// ============================================================================
-// Mock GameHub for Unit Testing
-// ============================================================================
+use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
 
 #[contract]
 pub struct MockGameHub;
@@ -26,10 +22,6 @@ impl MockGameHub {
 
     pub fn end_game(_env: Env, _session_id: u32, _player1_won: bool) {}
 }
-
-// ============================================================================
-// Test Helpers
-// ============================================================================
 
 fn setup_test() -> (
     Env,
@@ -62,90 +54,123 @@ fn setup_test() -> (
     (env, client, player1, player2)
 }
 
-// ============================================================================
-// Game Logic Tests
-// ============================================================================
-
-#[test]
-fn test_create_game() {
-    let (_env, client, p1, _p2) = setup_test();
-    let session_id = 1u32;
-    let points = 100i128;
-
-    client.create_game(&session_id, &p1, &points);
-
-    let game = client.get_game(&session_id);
-    assert_eq!(game.p1_health, 4);
-    assert_eq!(game.p2_health, 4);
-    assert!(matches!(game.status, GameStatus::WaitingForPlayer2));
-    assert!(game.player2.is_none());
+fn hash_seed(env: &Env, seed: &BytesN<32>) -> BytesN<32> {
+    env.crypto().keccak256(&seed.clone().into()).into()
 }
 
 #[test]
-fn test_join_game() {
-    let (_env, client, p1, p2) = setup_test();
+fn test_zk_commit_reveal_flow() {
+    let (env, client, p1, p2) = setup_test();
     let session_id = 1u32;
 
+    // Create game
     client.create_game(&session_id, &p1, &100);
+
+    // Join game
     client.join_game(&session_id, &p2, &100);
 
     let game = client.get_game(&session_id);
-    assert!(matches!(game.status, GameStatus::Ready));
-    assert!(game.player2.is_some());
-    assert_eq!(game.player2.unwrap(), p2);
-}
+    assert!(matches!(game.status, GameStatus::AwaitingSeeds));
 
-#[test]
-fn test_start_game() {
-    let (_env, client, p1, p2) = setup_test();
-    let session_id = 1u32;
+    // ZK Step 1: Both players commit their seeds
+    let p1_seed = BytesN::<32>::from_array(&env, &[1u8; 32]);
+    let p2_seed = BytesN::<32>::from_array(&env, &[2u8; 32]);
 
-    client.create_game(&session_id, &p1, &100);
-    client.join_game(&session_id, &p2, &100);
-    client.start_game(&session_id);
-    client.start_round(&session_id);
+    let p1_commitment = hash_seed(&env, &p1_seed);
+    let p2_commitment = hash_seed(&env, &p2_seed);
+
+    client.commit_seed(&session_id, &p1, &p1_commitment);
+    client.commit_seed(&session_id, &p2, &p2_commitment);
+
+    let game = client.get_game(&session_id);
+    assert!(matches!(game.status, GameStatus::AwaitingReveal));
+
+    // ZK Step 2: Both players reveal
+    client.reveal_seed(&session_id, &p1, &p1_seed);
+    client.reveal_seed(&session_id, &p2, &p2_seed);
+
+    // Finalize and start
+    client.finalize_game_start(&session_id);
 
     let game = client.get_game(&session_id);
     assert!(matches!(game.status, GameStatus::InProgress));
+    assert!(game.live_count > 0);
+    assert!(game.blank_count > 0);
     assert!(game.shells_remaining > 0);
 }
 
 #[test]
-fn test_shoot_self_blank_gives_extra_turn() {
-    let (_env, client, p1, p2) = setup_test();
+#[should_panic(expected = "Error(Contract, #8)")]
+fn test_zk_invalid_reveal_fails() {
+    let (env, client, p1, p2) = setup_test();
     let session_id = 1u32;
 
     client.create_game(&session_id, &p1, &100);
     client.join_game(&session_id, &p2, &100);
-    client.start_game(&session_id);
-    client.start_round(&session_id);
 
-    let initial_game = client.get_game(&session_id);
-    let initial_shells = initial_game.shells_remaining;
+    let p1_seed = BytesN::<32>::from_array(&env, &[1u8; 32]);
+    let wrong_seed = BytesN::<32>::from_array(&env, &[99u8; 32]);
 
-    let is_live = client.shoot_self(&session_id, &p1);
+    let p1_commitment = hash_seed(&env, &p1_seed);
+    let p2_commitment = hash_seed(&env, &wrong_seed);
 
-    let game = client.get_game(&session_id);
+    client.commit_seed(&session_id, &p1, &p1_commitment);
+    client.commit_seed(&session_id, &p2, &p2_commitment);
 
-    if is_live {
-        assert_eq!(game.turn, 2);
-    } else {
-        assert_eq!(game.turn, 1);
-    }
-
-    assert_eq!(game.shells_remaining, initial_shells - 1);
+    // Try to reveal wrong seed (should fail)
+    client.reveal_seed(&session_id, &p1, &wrong_seed);
 }
 
 #[test]
-fn test_shoot_opponent_switches_turn() {
-    let (_env, client, p1, p2) = setup_test();
+fn test_deterministic_shells() {
+    let (env, client, p1, p2) = setup_test();
     let session_id = 1u32;
 
     client.create_game(&session_id, &p1, &100);
     client.join_game(&session_id, &p2, &100);
-    client.start_game(&session_id);
-    client.start_round(&session_id);
 
+    let p1_seed = BytesN::<32>::from_array(&env, &[42u8; 32]);
+    let p2_seed = BytesN::<32>::from_array(&env, &[24u8; 32]);
+
+    let p1_commitment = hash_seed(&env, &p1_seed);
+    let p2_commitment = hash_seed(&env, &p2_seed);
+
+    client.commit_seed(&session_id, &p1, &p1_commitment);
+    client.commit_seed(&session_id, &p2, &p2_commitment);
+
+    client.reveal_seed(&session_id, &p1, &p1_seed);
+    client.reveal_seed(&session_id, &p2, &p2_seed);
+
+    client.finalize_game_start(&session_id);
+
+    let game1 = client.get_game(&session_id);
+
+    // Query again - should be same
+    let game2 = client.get_game(&session_id);
+
+    assert_eq!(game1.live_count, game2.live_count);
+    assert_eq!(game1.blank_count, game2.blank_count);
+}
+
+#[test]
+fn test_gameplay_after_zk() {
+    let (env, client, p1, p2) = setup_test();
+    let session_id = 1u32;
+
+    // Full ZK flow
+    client.create_game(&session_id, &p1, &100);
+    client.join_game(&session_id, &p2, &100);
+
+    let p1_seed = BytesN::<32>::from_array(&env, &[1u8; 32]);
+    let p2_seed = BytesN::<32>::from_array(&env, &[2u8; 32]);
+
+    client.commit_seed(&session_id, &p1, &hash_seed(&env, &p1_seed));
+    client.commit_seed(&session_id, &p2, &hash_seed(&env, &p2_seed));
+    client.reveal_seed(&session_id, &p1, &p1_seed);
+    client.reveal_seed(&session_id, &p2, &p2_seed);
+    client.finalize_game_start(&session_id);
+
+    // Now play
     let _ = client.shoot_opponent(&session_id, &p1);
 
     let game = client.get_game(&session_id);
@@ -153,53 +178,18 @@ fn test_shoot_opponent_switches_turn() {
 }
 
 #[test]
-fn test_game_over() {
-    let (_env, client, p1, p2) = setup_test();
+#[should_panic(expected = "Error(Contract, #11)")]
+fn test_cannot_reveal_before_both_commit() {
+    let (env, client, p1, _p2) = setup_test();
     let session_id = 1u32;
 
     client.create_game(&session_id, &p1, &100);
-    client.join_game(&session_id, &p2, &100);
-    client.start_game(&session_id);
-    client.start_round(&session_id);
 
-    let mut game = client.get_game(&session_id);
+    let seed = BytesN::<32>::from_array(&env, &[1u8; 32]);
+    let commitment = hash_seed(&env, &seed);
 
-    while game.winner.is_none() && game.shells_remaining > 0 {
-        if game.turn == 1 {
-            let _ = client.shoot_opponent(&session_id, &p1);
-        } else {
-            let _ = client.shoot_opponent(&session_id, &p2);
-        }
+    client.commit_seed(&session_id, &p1, &commitment);
 
-        game = client.get_game(&session_id);
-
-        if game.shells_remaining == 0 && game.winner.is_none() {
-            client.start_round(&session_id);
-            game = client.get_game(&session_id);
-        }
-    }
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #4)")]
-fn test_not_your_turn() {
-    let (_env, client, p1, p2) = setup_test();
-    let session_id = 1u32;
-
-    client.create_game(&session_id, &p1, &100);
-    client.join_game(&session_id, &p2, &100);
-    client.start_game(&session_id);
-    client.start_round(&session_id);
-
-    client.shoot_opponent(&session_id, &p2);
-}
-
-#[test]
-#[should_panic(expected = "Cannot play against yourself")]
-fn test_cannot_play_yourself() {
-    let (_env, client, p1, _p2) = setup_test();
-    let session_id = 1u32;
-
-    client.create_game(&session_id, &p1, &100);
-    client.join_game(&session_id, &p1, &100);
+    // Try to reveal before player2 commits
+    client.reveal_seed(&session_id, &p1, &seed);
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
-import { buckshotRouletteService } from './buckshotRouletteService';
-import type { Game } from './bindings';
+import { buckshotRouletteService, generateZKSeed, hashSeed } from './buckshotRouletteService';
+import type { Game, GameStatus } from './bindings';
 import { useWallet } from '@/hooks/useWallet';
 import './BuckshotRouletteGame.css';
 
@@ -19,7 +19,7 @@ interface BuckshotRouletteGameProps {
   onGameComplete: () => void;
 }
 
-type GamePhase = 'menu' | 'create' | 'join' | 'waiting' | 'round_start' | 'playing' | 'game_over';
+type GamePhase = 'menu' | 'create' | 'join' | 'waiting' | 'zk_commit' | 'zk_reveal' | 'round_start' | 'playing' | 'game_over';
 
 export function BuckshotRouletteGame({
   userAddress,
@@ -46,26 +46,57 @@ export function BuckshotRouletteGame({
   const [joinSessionId, setJoinSessionId] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
   const [lastShotResult, setLastShotResult] = useState<{ isLive: boolean; target: string } | null>(null);
-  const [roundInfo, setRoundInfo] = useState<{ live: number; blank: number; total: number } | null>(null);
   const [gameOverMsg, setGameOverMsg] = useState<string>('');
+  
+  // ZK State
+  const [mySeed, setMySeed] = useState<Uint8Array | null>(null);
+  const [myCommitment, setMyCommitment] = useState<Uint8Array | null>(null);
+  const [p1Committed, setP1Committed] = useState(false);
+  const [p2Committed, setP2Committed] = useState(false);
+  const [p1Revealed, setP1Revealed] = useState(false);
+  const [p2Revealed, setP2Revealed] = useState(false);
 
   const MAX_HEALTH = 4;
+
+  const log = useCallback((msg: string) => {
+    setLogs(prev => [...prev.slice(-20), `> ${msg}`]);
+  }, []);
   
-  // Fix player detection - player2 is Option<Address>
+  // Load seed from localStorage on mount or session change
+  useEffect(() => {
+    if (sessionId && userAddress) {
+      const storedSeed = localStorage.getItem(`zk_seed_${sessionId}_${userAddress}`);
+      const storedCommitment = localStorage.getItem(`zk_commitment_${sessionId}_${userAddress}`);
+      
+      if (storedSeed) {
+        try {
+          const seedArray = JSON.parse(storedSeed);
+          setMySeed(new Uint8Array(seedArray));
+          log('Restored your seed from storage.');
+        } catch (e) {
+          console.error('Failed to parse stored seed:', e);
+        }
+      }
+      if (storedCommitment) {
+        try {
+          const commitmentArray = JSON.parse(storedCommitment);
+          setMyCommitment(new Uint8Array(commitmentArray));
+        } catch (e) {
+          console.error('Failed to parse stored commitment:', e);
+        }
+      }
+    }
+  }, [sessionId, userAddress, log]);
+  
   const isPlayer1 = game?.player1 === userAddress;
   const isPlayer2 = game?.player2 === userAddress;
   const playerHealth = isPlayer1 ? game?.p1_health : game?.p2_health;
   const opponentHealth = isPlayer1 ? game?.p2_health : game?.p1_health;
   
-  // Fix turn detection - check if it's the current player's turn
   const isPlayerTurn = game && (
     (game.turn === 1 && isPlayer1) || 
     (game.turn === 2 && isPlayer2)
   );
-
-  const log = useCallback((msg: string) => {
-    setLogs(prev => [...prev.slice(-20), `> ${msg}`]);
-  }, []);
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -205,6 +236,23 @@ export function BuckshotRouletteGame({
     setTimeout(() => scene.background = new THREE.Color(0x050505), 100);
   }, []);
 
+  // Check game status from contract
+  const checkGameStatus = useCallback(async (sid: number) => {
+    const gameState = await buckshotRouletteService.getGame(sid);
+    if (!gameState) return null;
+    
+    setGame(gameState);
+    
+    // Check ZK status
+    const status = gameState.status;
+    if (status.tag === 'AwaitingSeeds') {
+      // Check commitments
+      // Note: We'd need to query individual commitments
+    }
+    
+    return gameState;
+  }, []);
+
   // Create a new game
   const handleCreateGame = async () => {
     setIsLoading(true);
@@ -238,22 +286,14 @@ export function BuckshotRouletteGame({
       const gameState = await buckshotRouletteService.getGame(sid);
       if (gameState && gameState.player2) {
         setGame(gameState);
-        log('Opponent joined! Starting game...');
-        
-        // Start the game
-        const signer = getContractSigner();
-        await buckshotRouletteService.startGame(sid, userAddress, signer);
-        await buckshotRouletteService.startRound(sid, userAddress, signer);
-        
-        const shellCounts = calculateShellCounts(sid, 1);
-        setRoundInfo(shellCounts);
-        setPhase('round_start');
+        log('Opponent joined!');
+        log('Now both players must commit their ZK seeds...');
+        setPhase('zk_commit');
         return true;
       }
       return false;
     };
 
-    // Poll every 3 seconds
     const interval = setInterval(async () => {
       const started = await poll();
       if (started) {
@@ -261,7 +301,6 @@ export function BuckshotRouletteGame({
       }
     }, 3000);
 
-    // Initial check
     poll();
   };
 
@@ -283,23 +322,126 @@ export function BuckshotRouletteGame({
       await buckshotRouletteService.joinGame(sid, userAddress, 100n, signer);
       
       setSessionId(sid);
-      log('Joined! Starting game...');
-      
-      // Start the game
-      await buckshotRouletteService.startGame(sid, userAddress, signer);
-      await buckshotRouletteService.startRound(sid, userAddress, signer);
+      log('Joined! Now both players must commit ZK seeds...');
+      setPhase('zk_commit');
       
       const gameState = await buckshotRouletteService.getGame(sid);
       setGame(gameState);
-      
-      const shellCounts = calculateShellCounts(sid, gameState?.round || 1);
-      setRoundInfo(shellCounts);
-      setPhase('round_start');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join game');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ZK Step 1: Commit seed
+  const handleCommitSeed = async () => {
+    if (!sessionId) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const signer = getContractSigner();
+      
+      // Generate random seed
+      const seed = generateZKSeed();
+      const commitment = await hashSeed(seed);
+      
+      log('Generating ZK commitment...');
+      
+      await buckshotRouletteService.commitSeed(sessionId, userAddress, commitment, signer);
+      
+      setMySeed(seed);
+      setMyCommitment(commitment);
+      
+      log('ZK seed committed! (Your seed is hidden until reveal)');
+      log('Waiting for opponent to commit...');
+      
+      // Start polling for both committed
+      pollForBothCommitted(sessionId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to commit seed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Poll for both players committed
+  const pollForBothCommitted = async (sid: number) => {
+    // For simplicity, we'll poll game status
+    // In production, you'd query individual commitments
+    const interval = setInterval(async () => {
+      const gameState = await buckshotRouletteService.getGame(sid);
+      if (gameState && gameState.status.tag === 'AwaitingReveal') {
+        log('Both players committed! Time to reveal...');
+        setPhase('zk_reveal');
+        clearInterval(interval);
+      }
+    }, 2000);
+  };
+
+  // ZK Step 2: Reveal seed
+  const handleRevealSeed = async () => {
+    if (!sessionId) {
+      setError('No session ID');
+      return;
+    }
+    
+    if (!mySeed) {
+      setError('No seed found. Please commit your seed first.');
+      log('ERROR: No seed found. You may need to go back and commit again.');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const signer = getContractSigner();
+      
+      log('Revealing ZK seed...');
+      
+      await buckshotRouletteService.revealSeed(sessionId, userAddress, mySeed, signer);
+      
+      log('ZK seed revealed!');
+      log('Waiting for opponent to reveal...');
+      
+      // Poll for both revealed and game finalized
+      pollForGameStart(sessionId);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to reveal seed';
+      setError(errMsg);
+      log('ERROR: ' + errMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Poll for game to start (both revealed)
+  const pollForGameStart = async (sid: number) => {
+    const interval = setInterval(async () => {
+      const gameState = await buckshotRouletteService.getGame(sid);
+      if (gameState && gameState.status.tag === 'InProgress') {
+        setGame(gameState);
+        log('ZK complete! Shell sequence generated from combined seeds.');
+        log(`Round 1: ${gameState.live_count} LIVE, ${gameState.blank_count} BLANK`);
+        setPhase('round_start');
+        clearInterval(interval);
+      } else if (gameState && gameState.status.tag === 'AwaitingReveal') {
+        // Both committed but not both revealed yet
+        // Check if both have revealed (would need finalize call)
+        // For now, let player1 finalize
+        if (gameState.player1 === userAddress) {
+          try {
+            const signer = getContractSigner();
+            await buckshotRouletteService.finalizeGameStart(sid, userAddress, signer);
+          } catch (e) {
+            // Not ready yet, continue polling
+          }
+        }
+      }
+    }, 2000);
   };
 
   // Shoot self
@@ -332,10 +474,11 @@ export function BuckshotRouletteGame({
         setGameOverMsg(gameState.winner === userAddress ? 'YOU WIN' : 'YOU DIED');
         setPhase('game_over');
         onGameComplete();
-      } else if (gameState?.shells_remaining === 0) {
+      } else if (gameState?.shells_remaining === 0 && !gameState?.winner) {
+        // Start new round
         await buckshotRouletteService.startRound(sessionId, userAddress, signer);
-        const shellCounts = calculateShellCounts(sessionId, gameState?.round || 1);
-        setRoundInfo(shellCounts);
+        const newGameState = await buckshotRouletteService.getGame(sessionId);
+        setGame(newGameState);
         setPhase('round_start');
       }
     } catch (err) {
@@ -375,10 +518,10 @@ export function BuckshotRouletteGame({
         setGameOverMsg(gameState.winner === userAddress ? 'YOU WIN' : 'YOU DIED');
         setPhase('game_over');
         onGameComplete();
-      } else if (gameState?.shells_remaining === 0) {
+      } else if (gameState?.shells_remaining === 0 && !gameState?.winner) {
         await buckshotRouletteService.startRound(sessionId, userAddress, signer);
-        const shellCounts = calculateShellCounts(sessionId, gameState?.round || 1);
-        setRoundInfo(shellCounts);
+        const newGameState = await buckshotRouletteService.getGame(sessionId);
+        setGame(newGameState);
         setPhase('round_start');
       }
     } catch (err) {
@@ -406,7 +549,6 @@ export function BuckshotRouletteGame({
           const prevTurn = game?.turn;
           setGame(gameState);
           
-          // Log turn change
           if (prevTurn !== gameState.turn) {
             const nowMyTurn = (gameState.turn === 1 && gameState.player1 === userAddress) ||
                              (gameState.turn === 2 && gameState.player2 === userAddress);
@@ -415,24 +557,20 @@ export function BuckshotRouletteGame({
             }
           }
           
-          // Check for game over
           if (gameState.winner) {
             setGameOverMsg(gameState.winner === userAddress ? 'YOU WIN' : 'YOU DIED');
             setPhase('game_over');
             onGameComplete();
           }
           
-          // Check for new round
-          if (gameState.shells_remaining === 0 && !gameState.winner) {
-            const shellCounts = calculateShellCounts(sessionId, gameState.round);
-            setRoundInfo(shellCounts);
+          if (gameState.shells_remaining === 0 && !gameState.winner && gameState.status.tag === 'InProgress') {
             setPhase('round_start');
           }
         }
       } catch (err) {
         console.error('Poll error:', err);
       }
-    }, 2000); // Poll every 2 seconds
+    }, 2000);
 
     return () => clearInterval(pollInterval);
   }, [phase, sessionId, userAddress, onGameComplete, game?.turn, log]);
@@ -449,16 +587,6 @@ export function BuckshotRouletteGame({
     ));
   };
 
-  // Calculate live/blank counts deterministically based on session_id and round
-  const calculateShellCounts = useCallback((sid: number, round: number) => {
-    // Simple deterministic calculation matching contract pattern
-    const seed = sid + round * 1000;
-    const total = 2 + (seed % 5); // 2-6 shells
-    const live = 1 + (Math.floor(seed / 7) % Math.floor(total / 2)); // 1 to half
-    const blank = total - live;
-    return { live, blank, total };
-  }, []);
-
   return (
     <div className="buckshot-game-wrapper">
       <div ref={containerRef} className="three-container" />
@@ -468,7 +596,8 @@ export function BuckshotRouletteGame({
       {phase === 'menu' && (
         <div className="menu-overlay">
           <h1>BUCKSHOT ROULETTE</h1>
-          <p className="subtitle">On-Chain Edition</p>
+          <p className="subtitle">🔐 ZK Commit-Reveal Edition</p>
+          <p className="zk-info">Shell sequence generated from combined player seeds</p>
           <div className="menu-buttons">
             <button onClick={() => setPhase('create')} className="btn-enter">
               CREATE GAME
@@ -557,8 +686,137 @@ export function BuckshotRouletteGame({
         </div>
       )}
 
+      {/* ZK Commit Phase */}
+      {phase === 'zk_commit' && game && (
+        <div className="menu-overlay">
+          <h2>🔐 ZK STEP 1: COMMIT SEED</h2>
+          <div className="zk-info-box">
+            <p>Both players must commit a secret seed.</p>
+            <p>The seeds will be combined to generate the shell sequence.</p>
+            <p>Nobody can predict the shells until both reveal!</p>
+          </div>
+          
+          <div className="zk-status">
+            <div className={`zk-player ${myCommitment ? 'committed' : ''}`}>
+              <span>YOU</span>
+              <span>{myCommitment ? '✅ Committed' : '⏳ Waiting'}</span>
+            </div>
+            <div className="zk-vs">VS</div>
+            <div className={`zk-player opponent ${game.player2 ? '' : 'waiting'}`}>
+              <span>OPPONENT</span>
+              <span>{game.status?.tag === 'AwaitingReveal' ? '✅ Committed' : '⏳ Waiting'}</span>
+            </div>
+          </div>
+          
+          <button 
+            onClick={handleCommitSeed} 
+            disabled={isLoading || !!myCommitment}
+            className="btn-zk"
+          >
+            {myCommitment ? '✓ Seed Committed' : isLoading ? 'Committing...' : 'Commit My Seed'}
+          </button>
+          
+          {myCommitment && (
+            <div className="commitment-display">
+              <p>Your commitment (hidden until reveal):</p>
+              <code>{Array.from(myCommitment.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('')}...</code>
+            </div>
+          )}
+          
+          <button 
+            onClick={async () => {
+              if (sessionId) {
+                const gs = await buckshotRouletteService.getGame(sessionId);
+                if (gs) {
+                  setGame(gs);
+                  log(`Status: ${gs.status?.tag}`);
+                  if (gs.status?.tag === 'AwaitingReveal') {
+                    log('Both players committed! Moving to reveal...');
+                    setPhase('zk_reveal');
+                  }
+                }
+              }
+            }}
+            className="btn-refresh"
+          >
+            🔄 Refresh Status
+          </button>
+          
+          <button onClick={() => setPhase('menu')} className="btn-back-menu">
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* ZK Reveal Phase */}
+      {phase === 'zk_reveal' && game && (
+        <div className="menu-overlay">
+          <h2>🔓 ZK STEP 2: REVEAL SEED</h2>
+          <div className="zk-info-box">
+            <p>Both players have committed their seeds.</p>
+            <p>Now reveal your seed to generate the shell sequence!</p>
+          </div>
+          
+          {mySeed ? (
+            <>
+              <div className="commitment-display">
+                <p>Your seed is ready to reveal:</p>
+                <code>{Array.from(mySeed.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('')}...</code>
+              </div>
+              <button 
+                onClick={handleRevealSeed} 
+                disabled={isLoading}
+                className="btn-zk reveal"
+              >
+                {isLoading ? 'Revealing...' : 'Reveal My Seed'}
+              </button>
+            </>
+          ) : (
+            <div className="error-box">
+              <p>⚠️ No seed found!</p>
+              <p>You may have refreshed the page. Please go back and commit again.</p>
+              <button onClick={() => setPhase('zk_commit')} className="btn-zk">
+                Go Back to Commit
+              </button>
+            </div>
+          )}
+          
+          {error && <div className="error">{error}</div>}
+          
+          <button onClick={() => setPhase('menu')} className="btn-back-menu">
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Round Start - Contract is source of truth */}
+      {phase === 'round_start' && game && (
+        <div className="round-notification">
+          <h2>ROUND {game.round}</h2>
+          <p className="zk-badge">🔐 ZK Verified Shells</p>
+          <div className="shell-display">
+            {Array.from({ length: game.live_count }).map((_, i) => (
+              <div key={`live-${i}`} className="shell-group">
+                <img src={shellLiveSvg} alt="Live" className="shell-img" />
+                <span className="live-label">LIVE</span>
+              </div>
+            ))}
+            {Array.from({ length: game.blank_count }).map((_, i) => (
+              <div key={`blank-${i}`} className="shell-group">
+                <img src={shellBlankSvg} alt="Blank" className="shell-img" />
+                <span className="blank-label">BLANK</span>
+              </div>
+            ))}
+          </div>
+          <p className="shell-total">Total: {game.shells_remaining} shells (from contract)</p>
+          <button onClick={() => setPhase('playing')} className="btn-ack">
+            READY
+          </button>
+        </div>
+      )}
+
       {/* Game UI */}
-      {(phase === 'playing' || phase === 'round_start') && game && (
+      {phase === 'playing' && game && (
         <div className="game-ui">
           <img src={crosshairSvg} alt="" className="crosshair" />
           
@@ -577,29 +835,6 @@ export function BuckshotRouletteGame({
               <div className="health-icons">{renderHealth(playerHealth)}</div>
             </div>
           </div>
-
-          {phase === 'round_start' && roundInfo && (
-            <div className="round-notification">
-              <h2>ROUND {game.round}</h2>
-              <div className="shell-display">
-                {Array.from({ length: roundInfo.live }).map((_, i) => (
-                  <div key={`live-${i}`} className="shell-group">
-                    <img src={shellLiveSvg} alt="Live" className="shell-img" />
-                    <span className="live-label">LIVE</span>
-                  </div>
-                ))}
-                {Array.from({ length: roundInfo.blank }).map((_, i) => (
-                  <div key={`blank-${i}`} className="shell-group">
-                    <img src={shellBlankSvg} alt="Blank" className="shell-img" />
-                    <span className="blank-label">BLANK</span>
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => setPhase('playing')} className="btn-ack">
-                OK
-              </button>
-            </div>
-          )}
 
           {lastShotResult && (
             <div className={`shot-result ${lastShotResult.isLive ? 'live' : 'blank'}`}>
@@ -628,7 +863,7 @@ export function BuckshotRouletteGame({
               </button>
             </div>
             <div className="game-info">
-              Round: {game.round} | Shells: {game.shells_remaining}
+              Round: {game.round} | Shells: {game.shells_remaining} | 🔐 ZK
             </div>
           </div>
           
@@ -642,11 +877,14 @@ export function BuckshotRouletteGame({
           <h1 style={{ color: gameOverMsg === 'YOU WIN' ? '#33ff33' : '#ff3333' }}>
             {gameOverMsg}
           </h1>
+          <p className="zk-badge">🔐 Verified on-chain with ZK commit-reveal</p>
           <button onClick={() => {
             setPhase('menu');
             setGame(null);
             setSessionId(null);
             setLogs([]);
+            setMySeed(null);
+            setMyCommitment(null);
           }} className="btn-restart">
             PLAY AGAIN
           </button>

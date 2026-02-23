@@ -200,6 +200,167 @@
   50% { opacity: 0.5; }
 }
 
+/* ZK Styles */
+.zk-info {
+  color: #ff9900;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+.zk-info-box {
+  background: #1a1a1a;
+  border: 1px solid #ff9900;
+  padding: 20px;
+  margin: 20px 0;
+  text-align: center;
+}
+
+.zk-info-box p {
+  margin: 10px 0;
+  color: #aaa;
+}
+
+.zk-badge {
+  color: #ff9900;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.btn-zk {
+  background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+  color: #ff9900;
+  border: 2px solid #ff9900;
+  padding: 20px 50px;
+  font-family: 'Courier Prime', monospace;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 0 20px rgba(255, 153, 0, 0.3);
+}
+
+.btn-zk:hover:not(:disabled) {
+  background: #ff9900;
+  color: #000;
+  box-shadow: 0 0 30px rgba(255, 153, 0, 0.6);
+}
+
+.btn-zk.reveal {
+  border-color: #33ff33;
+  color: #33ff33;
+  box-shadow: 0 0 20px rgba(51, 255, 51, 0.3);
+}
+
+.btn-zk.reveal:hover:not(:disabled) {
+  background: #33ff33;
+  color: #000;
+  box-shadow: 0 0 30px rgba(51, 255, 51, 0.6);
+}
+
+.btn-zk:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.commitment-display {
+  margin-top: 20px;
+  padding: 15px;
+  background: #111;
+  border: 1px solid #333;
+}
+
+.commitment-display p {
+  color: #888;
+  margin-bottom: 5px;
+}
+
+.commitment-display code {
+  color: #ff9900;
+  font-size: 1.2rem;
+  word-break: break-all;
+}
+
+.shell-total {
+  color: #ff9900;
+  font-size: 0.9rem;
+  margin-top: 15px;
+}
+
+/* ZK Status Display */
+.zk-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  margin: 20px 0;
+}
+
+.zk-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 15px 25px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  min-width: 120px;
+}
+
+.zk-player span:first-child {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.zk-player span:last-child {
+  font-size: 0.9rem;
+  color: #888;
+}
+
+.zk-player.committed {
+  border-color: #33ff33;
+  background: rgba(51, 255, 51, 0.1);
+}
+
+.zk-player.committed span:last-child {
+  color: #33ff33;
+}
+
+.zk-player.opponent {
+  border-color: #ff9900;
+}
+
+.zk-player.opponent.committed {
+  border-color: #33ff33;
+  background: rgba(51, 255, 51, 0.1);
+}
+
+.zk-player.opponent.committed span:last-child {
+  color: #33ff33;
+}
+
+.zk-vs {
+  font-size: 1.2rem;
+  color: #666;
+  font-weight: bold;
+}
+
+.btn-refresh {
+  background: transparent;
+  border: 1px solid #666;
+  color: #888;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-family: 'Courier Prime', monospace;
+  margin-top: 10px;
+}
+
+.btn-refresh:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
 /* Game UI */
 .game-ui {
   position: absolute;
