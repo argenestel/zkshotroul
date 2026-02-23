@@ -32,4 +32,4 @@ The game features a fully custom Three.js rendering pipeline designed to emulate
 Built entirely on the **Stellar Game Studio** framework, the game supports instant connections with Freighter and other Stellar wallets, utilizing session keys to allow seamless, fast-paced turns without intrusive pop-ups on every shot.
 
 ---
-*Built with ♥️ for Stellar game developers.*
+*Built with ♥️ from game developers who loves Stellar.*

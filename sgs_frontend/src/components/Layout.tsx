@@ -24,9 +24,9 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
           <div className="brand-heading">
             <img className="brand-logo" src={studioLogo} alt="Stellar Game Studio logo" />
             <div className="brand-copy">
-              <div className="brand-title">Stellar Game Studio</div>
+              <div className="brand-title">Planetary Game Studio</div>
               <div className="brand-subtitle-row">
-                <p className="brand-subtitle">A DEVELOPER TOOLKIT FOR BUILDING WEB3 GAMES ON STELLAR</p>
+                <p className="brand-subtitle">BUILDING GAMES ON STELLAR WITH ZK</p>
                 <span className="brand-version">v0.1.2</span>
               </div>
             </div>
@@ -67,7 +67,7 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
       <main className="studio-main">{children}</main>
 
       <footer className="studio-footer">
-        <span className="footer-meta">Built with ♥️ for Stellar game developers</span>
+        <span className="footer-meta">Built with ♥️ from game developers who loves Stellar</span>
       </footer>
     </div>
   );
