@@ -3,7 +3,6 @@ import { config } from './config';
 import { Layout } from './components/Layout';
 import { GamesCatalog } from './components/GamesCatalog';
 import { DocsPage } from './pages/DocsPage';
-import { HomePage } from './pages/HomePage';
 import type { Page } from './types/navigation';
 
 const baseUrl = import.meta.env.BASE_URL || '/';
@@ -40,7 +39,6 @@ const resolvePageFromLocation = (): Page => {
   const segment = relative.replace(/^\/+/, '').split('/')[0];
 
   if (segment === 'docs') return 'docs';
-  if (segment === 'games') return 'games';
   return 'home';
 };
 
@@ -95,8 +93,7 @@ function App() {
       )}
 
       {page === 'docs' && <DocsPage />}
-      {page === 'games' && <GamesCatalog onBack={() => navigate('home')} />}
-      {page === 'home' && <HomePage onNavigate={navigate} />}
+      {page === 'home' && <GamesCatalog />}
     </Layout>
   );
 }

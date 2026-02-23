@@ -21,7 +21,7 @@ import type {
   Timepoint,
   Duration,
 } from "@stellar/stellar-sdk/contract";
-export * from "@stellar/stellar-sdk";
+
 export * as contract from "@stellar/stellar-sdk/contract";
 export * as rpc from "@stellar/stellar-sdk/rpc";
 
@@ -54,14 +54,14 @@ export interface Game {
 }
 
 export const Errors = {
-  1: {message:"GameNotFound"},
-  2: {message:"NotPlayer"},
-  3: {message:"AlreadyRolled"},
-  4: {message:"BothPlayersNotRolled"},
-  5: {message:"GameAlreadyEnded"}
+  1: { message: "GameNotFound" },
+  2: { message: "NotPlayer" },
+  3: { message: "AlreadyRolled" },
+  4: { message: "BothPlayersNotRolled" },
+  5: { message: "GameAlreadyEnded" }
 }
 
-export type DataKey = {tag: "Game", values: readonly [u32]} | {tag: "GameHubAddress", values: void} | {tag: "Admin", values: void};
+export type DataKey = { tag: "Game", values: readonly [u32] } | { tag: "GameHubAddress", values: void } | { tag: "Admin", values: void };
 
 export interface Client {
   /**
@@ -73,7 +73,7 @@ export interface Client {
    * * `session_id` - The session ID of the game
    * * `player` - Address of the player rolling the dice
    */
-  roll: ({session_id, player}: {session_id: u32, player: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  roll: ({ session_id, player }: { session_id: u32, player: string }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a get_hub transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -91,7 +91,7 @@ export interface Client {
    * # Arguments
    * * `new_hub` - The new GameHub contract address
    */
-  set_hub: ({new_hub}: {new_hub: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  set_hub: ({ new_hub }: { new_hub: string }, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -100,7 +100,7 @@ export interface Client {
    * # Arguments
    * * `new_wasm_hash` - The hash of the new WASM binary
    */
-  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  upgrade: ({ new_wasm_hash }: { new_wasm_hash: Buffer }, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a get_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -112,7 +112,7 @@ export interface Client {
    * # Returns
    * * `Game` - The game state (includes dice after game ends)
    */
-  get_game: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Game>>>
+  get_game: ({ session_id }: { session_id: u32 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<Game>>>
 
   /**
    * Construct and simulate a get_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -130,7 +130,7 @@ export interface Client {
    * # Arguments
    * * `new_admin` - The new admin address
    */
-  set_admin: ({new_admin}: {new_admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  set_admin: ({ new_admin }: { new_admin: string }, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a start_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -147,7 +147,7 @@ export interface Client {
    * * `player1_points` - Points amount committed by player 1
    * * `player2_points` - Points amount committed by player 2
    */
-  start_game: ({session_id, player1, player2, player1_points, player2_points}: {session_id: u32, player1: string, player2: string, player1_points: i128, player2_points: i128}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  start_game: ({ session_id, player1, player2, player1_points, player2_points }: { session_id: u32, player1: string, player2: string, player1_points: i128, player2_points: i128 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a reveal_winner transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -161,13 +161,13 @@ export interface Client {
    * # Returns
    * * `Address` - Address of the winning player
    */
-  reveal_winner: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
+  reveal_winner: ({ session_id }: { session_id: u32 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<string>>>
 
 }
 export class Client extends ContractClient {
   static async deploy<T = Client>(
-        /** Constructor/Initialization Args for the contract's `__constructor` method */
-        {admin, game_hub}: {admin: string, game_hub: string},
+    /** Constructor/Initialization Args for the contract's `__constructor` method */
+    { admin, game_hub }: { admin: string, game_hub: string },
     /** Options for initializing a Client as well as for calling a method, with extras specific to deploying. */
     options: MethodOptions &
       Omit<ContractClientOptions, "contractId"> & {
@@ -179,11 +179,11 @@ export class Client extends ContractClient {
         format?: "hex" | "base64";
       }
   ): Promise<AssembledTransaction<T>> {
-    return ContractClient.deploy({admin, game_hub}, options)
+    return ContractClient.deploy({ admin, game_hub }, options)
   }
   constructor(public readonly options: ContractClientOptions) {
     super(
-      new ContractSpec([ "AAAAAQAAAAAAAAAAAAAABEdhbWUAAAALAAAAAAAAAAdwbGF5ZXIxAAAAABMAAAAAAAAADHBsYXllcjFfZGllMQAAA+gAAAAEAAAAAAAAAAxwbGF5ZXIxX2RpZTIAAAPoAAAABAAAAAAAAAAOcGxheWVyMV9wb2ludHMAAAAAAAsAAAAAAAAADnBsYXllcjFfcm9sbGVkAAAAAAABAAAAAAAAAAdwbGF5ZXIyAAAAABMAAAAAAAAADHBsYXllcjJfZGllMQAAA+gAAAAEAAAAAAAAAAxwbGF5ZXIyX2RpZTIAAAPoAAAABAAAAAAAAAAOcGxheWVyMl9wb2ludHMAAAAAAAsAAAAAAAAADnBsYXllcjJfcm9sbGVkAAAAAAABAAAAAAAAAAZ3aW5uZXIAAAAAA+gAAAAT",
+      new ContractSpec(["AAAAAQAAAAAAAAAAAAAABEdhbWUAAAALAAAAAAAAAAdwbGF5ZXIxAAAAABMAAAAAAAAADHBsYXllcjFfZGllMQAAA+gAAAAEAAAAAAAAAAxwbGF5ZXIxX2RpZTIAAAPoAAAABAAAAAAAAAAOcGxheWVyMV9wb2ludHMAAAAAAAsAAAAAAAAADnBsYXllcjFfcm9sbGVkAAAAAAABAAAAAAAAAAdwbGF5ZXIyAAAAABMAAAAAAAAADHBsYXllcjJfZGllMQAAA+gAAAAEAAAAAAAAAAxwbGF5ZXIyX2RpZTIAAAPoAAAABAAAAAAAAAAOcGxheWVyMl9wb2ludHMAAAAAAAsAAAAAAAAADnBsYXllcjJfcm9sbGVkAAAAAAABAAAAAAAAAAZ3aW5uZXIAAAAAA+gAAAAT",
         "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAABQAAAAAAAAAMR2FtZU5vdEZvdW5kAAAAAQAAAAAAAAAJTm90UGxheWVyAAAAAAAAAgAAAAAAAAANQWxyZWFkeVJvbGxlZAAAAAAAAAMAAAAAAAAAFEJvdGhQbGF5ZXJzTm90Um9sbGVkAAAABAAAAAAAAAAQR2FtZUFscmVhZHlFbmRlZAAAAAU=",
         "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAAAwAAAAEAAAAAAAAABEdhbWUAAAABAAAABAAAAAAAAAAAAAAADkdhbWVIdWJBZGRyZXNzAAAAAAAAAAAAAAAAAAVBZG1pbgAAAA==",
         "AAAAAAAAAMpDb21taXQgYSByb2xsIGZvciB0aGUgY3VycmVudCBnYW1lLgpCb3RoIHBsYXllcnMgbXVzdCByb2xsIGJlZm9yZSB0aGUgd2lubmVyIGNhbiBiZSByZXZlYWxlZC4KCiMgQXJndW1lbnRzCiogYHNlc3Npb25faWRgIC0gVGhlIHNlc3Npb24gSUQgb2YgdGhlIGdhbWUKKiBgcGxheWVyYCAtIEFkZHJlc3Mgb2YgdGhlIHBsYXllciByb2xsaW5nIHRoZSBkaWNlAAAAAAAEcm9sbAAAAAIAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAAAAAAABnBsYXllcgAAAAAAEwAAAAEAAAPpAAAD7QAAAAAAAAAD",
@@ -195,19 +195,19 @@ export class Client extends ContractClient {
         "AAAAAAAAAEpTZXQgYSBuZXcgYWRtaW4gYWRkcmVzcwoKIyBBcmd1bWVudHMKKiBgbmV3X2FkbWluYCAtIFRoZSBuZXcgYWRtaW4gYWRkcmVzcwAAAAAACXNldF9hZG1pbgAAAAAAAAEAAAAAAAAACW5ld19hZG1pbgAAAAAAABMAAAAA",
         "AAAAAAAAAipTdGFydCBhIG5ldyBnYW1lIGJldHdlZW4gdHdvIHBsYXllcnMgd2l0aCBwb2ludHMuClRoaXMgY3JlYXRlcyBhIHNlc3Npb24gaW4gdGhlIEdhbWUgSHViIGFuZCBsb2NrcyBwb2ludHMgYmVmb3JlIHN0YXJ0aW5nIHRoZSBnYW1lLgoKKipDUklUSUNBTDoqKiBUaGlzIG1ldGhvZCByZXF1aXJlcyBhdXRob3JpemF0aW9uIGZyb20gVEhJUyBjb250cmFjdCAobm90IHBsYXllcnMpLgpUaGUgR2FtZSBIdWIgd2lsbCBjYWxsIGBnYW1lX2lkLnJlcXVpcmVfYXV0aCgpYCB3aGljaCBjaGVja3MgdGhpcyBjb250cmFjdCdzIGFkZHJlc3MuCgojIEFyZ3VtZW50cwoqIGBzZXNzaW9uX2lkYCAtIFVuaXF1ZSBzZXNzaW9uIGlkZW50aWZpZXIgKHUzMikKKiBgcGxheWVyMWAgLSBBZGRyZXNzIG9mIGZpcnN0IHBsYXllcgoqIGBwbGF5ZXIyYCAtIEFkZHJlc3Mgb2Ygc2Vjb25kIHBsYXllcgoqIGBwbGF5ZXIxX3BvaW50c2AgLSBQb2ludHMgYW1vdW50IGNvbW1pdHRlZCBieSBwbGF5ZXIgMQoqIGBwbGF5ZXIyX3BvaW50c2AgLSBQb2ludHMgYW1vdW50IGNvbW1pdHRlZCBieSBwbGF5ZXIgMgAAAAAACnN0YXJ0X2dhbWUAAAAAAAUAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAAAAAAAB3BsYXllcjEAAAAAEwAAAAAAAAAHcGxheWVyMgAAAAATAAAAAAAAAA5wbGF5ZXIxX3BvaW50cwAAAAAACwAAAAAAAAAOcGxheWVyMl9wb2ludHMAAAAAAAsAAAABAAAD6QAAA+0AAAAAAAAAAw==",
         "AAAAAAAAAKNJbml0aWFsaXplIHRoZSBjb250cmFjdCB3aXRoIEdhbWVIdWIgYWRkcmVzcyBhbmQgYWRtaW4KCiMgQXJndW1lbnRzCiogYGFkbWluYCAtIEFkbWluIGFkZHJlc3MgKGNhbiB1cGdyYWRlIGNvbnRyYWN0KQoqIGBnYW1lX2h1YmAgLSBBZGRyZXNzIG9mIHRoZSBHYW1lSHViIGNvbnRyYWN0AAAAAA1fX2NvbnN0cnVjdG9yAAAAAAAAAgAAAAAAAAAFYWRtaW4AAAAAAAATAAAAAAAAAAhnYW1lX2h1YgAAABMAAAAA",
-        "AAAAAAAAAThSZXZlYWwgdGhlIHdpbm5lciBvZiB0aGUgZ2FtZSBhbmQgc3VibWl0IG91dGNvbWUgdG8gR2FtZUh1Yi4KQ2FuIG9ubHkgYmUgY2FsbGVkIGFmdGVyIGJvdGggcGxheWVycyBoYXZlIHJvbGxlZC4KVGhpcyBnZW5lcmF0ZXMgZGljZSByb2xscyBmb3IgYm90aCBwbGF5ZXJzLCBkZXRlcm1pbmVzIHRoZSB3aW5uZXIsIGFuZCBlbmRzIHRoZSBzZXNzaW9uLgoKIyBBcmd1bWVudHMKKiBgc2Vzc2lvbl9pZGAgLSBUaGUgc2Vzc2lvbiBJRCBvZiB0aGUgZ2FtZQoKIyBSZXR1cm5zCiogYEFkZHJlc3NgIC0gQWRkcmVzcyBvZiB0aGUgd2lubmluZyBwbGF5ZXIAAAANcmV2ZWFsX3dpbm5lcgAAAAAAAAEAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAABAAAD6QAAABMAAAAD" ]),
+        "AAAAAAAAAThSZXZlYWwgdGhlIHdpbm5lciBvZiB0aGUgZ2FtZSBhbmQgc3VibWl0IG91dGNvbWUgdG8gR2FtZUh1Yi4KQ2FuIG9ubHkgYmUgY2FsbGVkIGFmdGVyIGJvdGggcGxheWVycyBoYXZlIHJvbGxlZC4KVGhpcyBnZW5lcmF0ZXMgZGljZSByb2xscyBmb3IgYm90aCBwbGF5ZXJzLCBkZXRlcm1pbmVzIHRoZSB3aW5uZXIsIGFuZCBlbmRzIHRoZSBzZXNzaW9uLgoKIyBBcmd1bWVudHMKKiBgc2Vzc2lvbl9pZGAgLSBUaGUgc2Vzc2lvbiBJRCBvZiB0aGUgZ2FtZQoKIyBSZXR1cm5zCiogYEFkZHJlc3NgIC0gQWRkcmVzcyBvZiB0aGUgd2lubmluZyBwbGF5ZXIAAAANcmV2ZWFsX3dpbm5lcgAAAAAAAAEAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAABAAAD6QAAABMAAAAD"]),
       options
     )
   }
   public readonly fromJSON = {
     roll: this.txFromJSON<Result<void>>,
-        get_hub: this.txFromJSON<string>,
-        set_hub: this.txFromJSON<null>,
-        upgrade: this.txFromJSON<null>,
-        get_game: this.txFromJSON<Result<Game>>,
-        get_admin: this.txFromJSON<string>,
-        set_admin: this.txFromJSON<null>,
-        start_game: this.txFromJSON<Result<void>>,
-        reveal_winner: this.txFromJSON<Result<string>>
+    get_hub: this.txFromJSON<string>,
+    set_hub: this.txFromJSON<null>,
+    upgrade: this.txFromJSON<null>,
+    get_game: this.txFromJSON<Result<Game>>,
+    get_admin: this.txFromJSON<string>,
+    set_admin: this.txFromJSON<null>,
+    start_game: this.txFromJSON<Result<void>>,
+    reveal_winner: this.txFromJSON<Result<string>>
   }
 }

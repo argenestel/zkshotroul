@@ -21,7 +21,7 @@ import type {
   Timepoint,
   Duration,
 } from "@stellar/stellar-sdk/contract";
-export * from "@stellar/stellar-sdk";
+
 export * as contract from "@stellar/stellar-sdk/contract";
 export * as rpc from "@stellar/stellar-sdk/rpc";
 
@@ -57,28 +57,28 @@ export interface Game {
 }
 
 export const Errors = {
-  1: {message:"GameNotFound"},
-  2: {message:"NotPlayer"},
-  3: {message:"GameAlreadyEnded"},
-  4: {message:"NotYourTurn"},
-  5: {message:"NoShellsRemaining"},
-  6: {message:"AlreadyCommitted"},
-  7: {message:"BothPlayersNotCommitted"},
-  8: {message:"CommitmentMismatch"},
-  9: {message:"AlreadyRevealed"},
-  10: {message:"SeedsNotRevealed"},
-  11: {message:"WaitingForOpponentCommit"},
-  12: {message:"WaitingForOpponentReveal"}
+  1: { message: "GameNotFound" },
+  2: { message: "NotPlayer" },
+  3: { message: "GameAlreadyEnded" },
+  4: { message: "NotYourTurn" },
+  5: { message: "NoShellsRemaining" },
+  6: { message: "AlreadyCommitted" },
+  7: { message: "BothPlayersNotCommitted" },
+  8: { message: "CommitmentMismatch" },
+  9: { message: "AlreadyRevealed" },
+  10: { message: "SeedsNotRevealed" },
+  11: { message: "WaitingForOpponentCommit" },
+  12: { message: "WaitingForOpponentReveal" }
 }
 
-export type DataKey = {tag: "Game", values: readonly [u32]} | {tag: "GameHubAddress", values: void} | {tag: "Admin", values: void} | {tag: "P1Commitment", values: readonly [u32]} | {tag: "P2Commitment", values: readonly [u32]} | {tag: "CombinedSeed", values: readonly [u32]};
+export type DataKey = { tag: "Game", values: readonly [u32] } | { tag: "GameHubAddress", values: void } | { tag: "Admin", values: void } | { tag: "P1Commitment", values: readonly [u32] } | { tag: "P2Commitment", values: readonly [u32] } | { tag: "CombinedSeed", values: readonly [u32] };
 
 export enum ShellType {
   Blank = 0,
   Live = 1,
 }
 
-export type GameStatus = {tag: "WaitingForPlayer2", values: void} | {tag: "AwaitingSeeds", values: void} | {tag: "AwaitingReveal", values: void} | {tag: "InProgress", values: void} | {tag: "Ended", values: void};
+export type GameStatus = { tag: "WaitingForPlayer2", values: void } | { tag: "AwaitingSeeds", values: void } | { tag: "AwaitingReveal", values: void } | { tag: "InProgress", values: void } | { tag: "Ended", values: void };
 
 
 export interface SeedCommitment {
@@ -96,17 +96,17 @@ export interface Client {
   /**
    * Construct and simulate a set_hub transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  set_hub: ({new_hub}: {new_hub: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  set_hub: ({ new_hub }: { new_hub: string }, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a upgrade transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  upgrade: ({new_wasm_hash}: {new_wasm_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  upgrade: ({ new_wasm_hash }: { new_wasm_hash: Buffer }, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a get_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_game: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<Game>>>
+  get_game: ({ session_id }: { session_id: u32 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<Game>>>
 
   /**
    * Construct and simulate a get_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -117,65 +117,65 @@ export interface Client {
    * Construct and simulate a join_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Player 2 joins the game
    */
-  join_game: ({session_id, player2, player2_points}: {session_id: u32, player2: string, player2_points: i128}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  join_game: ({ session_id, player2, player2_points }: { session_id: u32, player2: string, player2_points: i128 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a set_admin transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  set_admin: ({new_admin}: {new_admin: string}, options?: MethodOptions) => Promise<AssembledTransaction<null>>
+  set_admin: ({ new_admin }: { new_admin: string }, options?: MethodOptions) => Promise<AssembledTransaction<null>>
 
   /**
    * Construct and simulate a shoot_self transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  shoot_self: ({session_id, player}: {session_id: u32, player: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<boolean>>>
+  shoot_self: ({ session_id, player }: { session_id: u32, player: string }, options?: MethodOptions) => Promise<AssembledTransaction<Result<boolean>>>
 
   /**
    * Construct and simulate a commit_seed transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Commit your secret seed (ZK step 1)
    * Player commits hash(secret) - the secret stays hidden
    */
-  commit_seed: ({session_id, player, commitment}: {session_id: u32, player: string, commitment: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  commit_seed: ({ session_id, player, commitment }: { session_id: u32, player: string, commitment: Buffer }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a create_game transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Player 1 creates a game lobby
    */
-  create_game: ({session_id, player1, player1_points}: {session_id: u32, player1: string, player1_points: i128}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  create_game: ({ session_id, player1, player1_points }: { session_id: u32, player1: string, player1_points: i128 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a reveal_seed transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Reveal your secret seed (ZK step 2)
    * Player reveals the original seed - contract verifies it matches commitment
    */
-  reveal_seed: ({session_id, player, seed}: {session_id: u32, player: string, seed: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  reveal_seed: ({ session_id, player, seed }: { session_id: u32, player: string, seed: Buffer }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a start_round transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Start a new round (generates shells from ZK seed)
    */
-  start_round: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  start_round: ({ session_id }: { session_id: u32 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a shoot_opponent transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  shoot_opponent: ({session_id, player}: {session_id: u32, player: string}, options?: MethodOptions) => Promise<AssembledTransaction<Result<boolean>>>
+  shoot_opponent: ({ session_id, player }: { session_id: u32, player: string }, options?: MethodOptions) => Promise<AssembledTransaction<Result<boolean>>>
 
   /**
    * Construct and simulate a finalize_game_start transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Finalize game start after ZK reveal (anyone can call)
    */
-  finalize_game_start: ({session_id}: {session_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  finalize_game_start: ({ session_id }: { session_id: u32 }, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a get_seed_commitment transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
-  get_seed_commitment: ({session_id, player}: {session_id: u32, player: string}, options?: MethodOptions) => Promise<AssembledTransaction<Option<SeedCommitment>>>
+  get_seed_commitment: ({ session_id, player }: { session_id: u32, player: string }, options?: MethodOptions) => Promise<AssembledTransaction<Option<SeedCommitment>>>
 
 }
 export class Client extends ContractClient {
   static async deploy<T = Client>(
-        /** Constructor/Initialization Args for the contract's `__constructor` method */
-        {admin, game_hub}: {admin: string, game_hub: string},
+    /** Constructor/Initialization Args for the contract's `__constructor` method */
+    { admin, game_hub }: { admin: string, game_hub: string },
     /** Options for initializing a Client as well as for calling a method, with extras specific to deploying. */
     options: MethodOptions &
       Omit<ContractClientOptions, "contractId"> & {
@@ -187,11 +187,11 @@ export class Client extends ContractClient {
         format?: "hex" | "base64";
       }
   ): Promise<AssembledTransaction<T>> {
-    return ContractClient.deploy({admin, game_hub}, options)
+    return ContractClient.deploy({ admin, game_hub }, options)
   }
   constructor(public readonly options: ContractClientOptions) {
     super(
-      new ContractSpec([ "AAAAAQAAAAAAAAAAAAAABEdhbWUAAAAOAAAAAAAAAAtibGFua19jb3VudAAAAAAEAAAAAAAAABNjdXJyZW50X3NoZWxsX2luZGV4AAAAAAQAAAAAAAAACmxpdmVfY291bnQAAAAAAAQAAAAAAAAACXAxX2hlYWx0aAAAAAAAAAQAAAAAAAAACXAyX2hlYWx0aAAAAAAAAAQAAAAAAAAAB3BsYXllcjEAAAAAEwAAAAAAAAAOcGxheWVyMV9wb2ludHMAAAAAAAsAAAAAAAAAB3BsYXllcjIAAAAD6AAAABMAAAAAAAAADnBsYXllcjJfcG9pbnRzAAAAAAALAAAAAAAAAAVyb3VuZAAAAAAAAAQAAAAAAAAAEHNoZWxsc19yZW1haW5pbmcAAAAEAAAAAAAAAAZzdGF0dXMAAAAAB9AAAAAKR2FtZVN0YXR1cwAAAAAAAAAAAAR0dXJuAAAABAAAAAAAAAAGd2lubmVyAAAAAAPoAAAAEw==",
+      new ContractSpec(["AAAAAQAAAAAAAAAAAAAABEdhbWUAAAAOAAAAAAAAAAtibGFua19jb3VudAAAAAAEAAAAAAAAABNjdXJyZW50X3NoZWxsX2luZGV4AAAAAAQAAAAAAAAACmxpdmVfY291bnQAAAAAAAQAAAAAAAAACXAxX2hlYWx0aAAAAAAAAAQAAAAAAAAACXAyX2hlYWx0aAAAAAAAAAQAAAAAAAAAB3BsYXllcjEAAAAAEwAAAAAAAAAOcGxheWVyMV9wb2ludHMAAAAAAAsAAAAAAAAAB3BsYXllcjIAAAAD6AAAABMAAAAAAAAADnBsYXllcjJfcG9pbnRzAAAAAAALAAAAAAAAAAVyb3VuZAAAAAAAAAQAAAAAAAAAEHNoZWxsc19yZW1haW5pbmcAAAAEAAAAAAAAAAZzdGF0dXMAAAAAB9AAAAAKR2FtZVN0YXR1cwAAAAAAAAAAAAR0dXJuAAAABAAAAAAAAAAGd2lubmVyAAAAAAPoAAAAEw==",
         "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAADAAAAAAAAAAMR2FtZU5vdEZvdW5kAAAAAQAAAAAAAAAJTm90UGxheWVyAAAAAAAAAgAAAAAAAAAQR2FtZUFscmVhZHlFbmRlZAAAAAMAAAAAAAAAC05vdFlvdXJUdXJuAAAAAAQAAAAAAAAAEU5vU2hlbGxzUmVtYWluaW5nAAAAAAAABQAAAAAAAAAQQWxyZWFkeUNvbW1pdHRlZAAAAAYAAAAAAAAAF0JvdGhQbGF5ZXJzTm90Q29tbWl0dGVkAAAAAAcAAAAAAAAAEkNvbW1pdG1lbnRNaXNtYXRjaAAAAAAACAAAAAAAAAAPQWxyZWFkeVJldmVhbGVkAAAAAAkAAAAAAAAAEFNlZWRzTm90UmV2ZWFsZWQAAAAKAAAAAAAAABhXYWl0aW5nRm9yT3Bwb25lbnRDb21taXQAAAALAAAAAAAAABhXYWl0aW5nRm9yT3Bwb25lbnRSZXZlYWwAAAAM",
         "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABgAAAAEAAAAAAAAABEdhbWUAAAABAAAABAAAAAAAAAAAAAAADkdhbWVIdWJBZGRyZXNzAAAAAAAAAAAAAAAAAAVBZG1pbgAAAAAAAAEAAAAAAAAADFAxQ29tbWl0bWVudAAAAAEAAAAEAAAAAQAAAAAAAAAMUDJDb21taXRtZW50AAAAAQAAAAQAAAABAAAAAAAAAAxDb21iaW5lZFNlZWQAAAABAAAABA==",
         "AAAAAwAAAAAAAAAAAAAACVNoZWxsVHlwZQAAAAAAAAIAAAAAAAAABUJsYW5rAAAAAAAAAAAAAAAAAAAETGl2ZQAAAAE=",
@@ -212,25 +212,25 @@ export class Client extends ContractClient {
         "AAAAAAAAAAAAAAANX19jb25zdHJ1Y3RvcgAAAAAAAAIAAAAAAAAABWFkbWluAAAAAAAAEwAAAAAAAAAIZ2FtZV9odWIAAAATAAAAAA==",
         "AAAAAAAAAAAAAAAOc2hvb3Rfb3Bwb25lbnQAAAAAAAIAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAAAAAAABnBsYXllcgAAAAAAEwAAAAEAAAPpAAAAAQAAAAM=",
         "AAAAAAAAADVGaW5hbGl6ZSBnYW1lIHN0YXJ0IGFmdGVyIFpLIHJldmVhbCAoYW55b25lIGNhbiBjYWxsKQAAAAAAABNmaW5hbGl6ZV9nYW1lX3N0YXJ0AAAAAAEAAAAAAAAACnNlc3Npb25faWQAAAAAAAQAAAABAAAD6QAAAAIAAAAD",
-        "AAAAAAAAAAAAAAATZ2V0X3NlZWRfY29tbWl0bWVudAAAAAACAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAAAAAAZwbGF5ZXIAAAAAABMAAAABAAAD6AAAB9AAAAAOU2VlZENvbW1pdG1lbnQAAA==" ]),
+        "AAAAAAAAAAAAAAATZ2V0X3NlZWRfY29tbWl0bWVudAAAAAACAAAAAAAAAApzZXNzaW9uX2lkAAAAAAAEAAAAAAAAAAZwbGF5ZXIAAAAAABMAAAABAAAD6AAAB9AAAAAOU2VlZENvbW1pdG1lbnQAAA=="]),
       options
     )
   }
   public readonly fromJSON = {
     get_hub: this.txFromJSON<string>,
-        set_hub: this.txFromJSON<null>,
-        upgrade: this.txFromJSON<null>,
-        get_game: this.txFromJSON<Result<Game>>,
-        get_admin: this.txFromJSON<string>,
-        join_game: this.txFromJSON<Result<void>>,
-        set_admin: this.txFromJSON<null>,
-        shoot_self: this.txFromJSON<Result<boolean>>,
-        commit_seed: this.txFromJSON<Result<void>>,
-        create_game: this.txFromJSON<Result<void>>,
-        reveal_seed: this.txFromJSON<Result<void>>,
-        start_round: this.txFromJSON<Result<void>>,
-        shoot_opponent: this.txFromJSON<Result<boolean>>,
-        finalize_game_start: this.txFromJSON<Result<void>>,
-        get_seed_commitment: this.txFromJSON<Option<SeedCommitment>>
+    set_hub: this.txFromJSON<null>,
+    upgrade: this.txFromJSON<null>,
+    get_game: this.txFromJSON<Result<Game>>,
+    get_admin: this.txFromJSON<string>,
+    join_game: this.txFromJSON<Result<void>>,
+    set_admin: this.txFromJSON<null>,
+    shoot_self: this.txFromJSON<Result<boolean>>,
+    commit_seed: this.txFromJSON<Result<void>>,
+    create_game: this.txFromJSON<Result<void>>,
+    reveal_seed: this.txFromJSON<Result<void>>,
+    start_round: this.txFromJSON<Result<void>>,
+    shoot_opponent: this.txFromJSON<Result<boolean>>,
+    finalize_game_start: this.txFromJSON<Result<void>>,
+    get_seed_commitment: this.txFromJSON<Option<SeedCommitment>>
   }
 }
