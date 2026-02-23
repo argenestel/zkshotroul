@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { buckshotRouletteService, generateZKSeed, hashSeed } from './buckshotRouletteService';
 import type { Game, GameStatus } from './bindings';
 import { useWallet } from '@/hooks/useWallet';
@@ -31,8 +34,9 @@ export function BuckshotRouletteGame({
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
-    dealerHead: THREE.Mesh;
-    shotgunGroup: THREE.Group;
+    dealerHead: THREE.Group | THREE.Mesh;
+    p1Gun: THREE.Group;
+    p2Gun: THREE.Group;
     ambientLight: THREE.AmbientLight;
   } | null>(null);
 
@@ -106,88 +110,375 @@ export function BuckshotRouletteGame({
     (game.turn === 2 && isPlayer2)
   );
 
+  // --- Background Ambiance (Web Audio API Drone) ---
+  useEffect(() => {
+    let audioCtx: AudioContext | null = null;
+    let osc1: OscillatorNode, osc2: OscillatorNode, lfo: OscillatorNode;
+    let gainNode: GainNode;
+
+    const initAudio = () => {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+      // Drone 1: Very low sub bass (Sine)
+      osc1 = audioCtx.createOscillator();
+      osc1.type = 'sine';
+      osc1.frequency.value = 55;
+
+      // Drone 2: Slightly detuned (Triangle) for an eerie beating effect
+      osc2 = audioCtx.createOscillator();
+      osc2.type = 'triangle';
+      osc2.frequency.value = 55.5;
+
+      // Filter to muffle it and make it sound like it's coming from outside a room
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 200;
+
+      // LFO for slow volume swelling (creates a breathing/pulsing atmospheric sound)
+      lfo = audioCtx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.1; // 10 second cycle
+
+      const lfoGain = audioCtx.createGain();
+      lfoGain.gain.value = 0.03; // Much lower LFO intensity
+      lfo.connect(lfoGain);
+
+      gainNode = audioCtx.createGain();
+      gainNode.gain.value = 0.05; // Much lower base volume
+
+      // Connect LFO to gain
+      lfoGain.connect(gainNode.gain);
+
+      osc1.connect(filter);
+      osc2.connect(filter);
+      filter.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      osc1.start();
+      osc2.start();
+      lfo.start();
+    };
+
+    const handleInteraction = () => {
+      initAudio();
+      if (audioCtx?.state === 'suspended') {
+        audioCtx.resume();
+      }
+    };
+
+    document.addEventListener('click', handleInteraction, { once: true });
+
+    return () => {
+      document.removeEventListener('click', handleInteraction);
+      if (audioCtx) {
+        audioCtx.close();
+      }
+    };
+  }, []);
+
   // Initialize Three.js scene
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // --- Scene Setup ---
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x050505);
-    scene.fog = new THREE.Fog(0x050505, 5, 20);
+    scene.background = new THREE.Color(0x020202);
+    scene.fog = new THREE.FogExp2(0x020202, 0.08);
 
-    const camera = new THREE.PerspectiveCamera(75, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 1000);
-    camera.position.set(0, 3, 6);
-    camera.lookAt(0, 0, 0);
+    const camera = new THREE.PerspectiveCamera(65, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.1, 100);
+    camera.position.set(0, 2.5, 4.5);
+    camera.lookAt(0, 1.2, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Removed outputEncoding as it's deprecated in newer Three.js, color space is managed automatically
     containerRef.current.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    // --- Lighting ---
+    const ambientLight = new THREE.AmbientLight(0x333344, 0.5); // Brighter ambient
     scene.add(ambientLight);
 
-    const spotLight = new THREE.SpotLight(0xffffff, 20);
-    spotLight.position.set(0, 10, 0);
-    spotLight.angle = Math.PI / 6;
-    spotLight.penumbra = 0.5;
+    // Interrogation lamp shining straight down on the table
+    const spotLight = new THREE.SpotLight(0xffeedd, 90, 30, Math.PI / 4, 0.4, 1);
+    spotLight.position.set(0, 7, -1);
+    spotLight.target.position.set(0, 0, -1);
     spotLight.castShadow = true;
+    spotLight.shadow.mapSize.width = 1024;
+    spotLight.shadow.mapSize.height = 1024;
     scene.add(spotLight);
+    scene.add(spotLight.target);
 
-    const tableGeometry = new THREE.BoxGeometry(8, 0.2, 5);
-    const tableMaterial = new THREE.MeshStandardMaterial({ color: 0x3d2b1f, roughness: 0.8 });
-    const table = new THREE.Mesh(tableGeometry, tableMaterial);
-    table.receiveShadow = true;
-    scene.add(table);
+    // --- Environment ---
+    // Table
+    const tableGroup = new THREE.Group();
+    const tableTop = new THREE.Mesh(
+      new THREE.BoxGeometry(7, 0.1, 4),
+      new THREE.MeshStandardMaterial({
+        color: 0x2a1e12,
+        roughness: 0.9,
+        metalness: 0.1,
+      })
+    );
+    tableTop.position.y = 0;
+    tableTop.receiveShadow = true;
+    tableGroup.add(tableTop);
 
+    // Table Rim
+    const tableRim = new THREE.Mesh(
+      new THREE.BoxGeometry(7.2, 0.2, 4.2),
+      new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 1 })
+    );
+    tableRim.position.y = -0.05;
+    tableRim.receiveShadow = true;
+    tableGroup.add(tableRim);
+    scene.add(tableGroup);
+
+    // Lamp Shade
+    const lampGeo = new THREE.ConeGeometry(0.8, 1, 16);
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
+    const lamp = new THREE.Mesh(lampGeo, lampMat);
+    lamp.position.set(0, 6.5, -1);
+    scene.add(lamp);
+
+    // --- Dealer (Menacing Figure) ---
     const dealerGroup = new THREE.Group();
-    const dealerBody = new THREE.Mesh(
-      new THREE.BoxGeometry(1.5, 2, 1),
+    dealerGroup.position.set(0, 0.1, -2.5);
+
+    // Shoulders/Chest
+    const chest = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 0.7, 1.8, 8),
+      new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.9 })
+    );
+    chest.position.y = 0.9;
+    chest.castShadow = true;
+    dealerGroup.add(chest);
+
+    // Neck
+    const neck = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.25, 0.4, 8),
       new THREE.MeshStandardMaterial({ color: 0x111111 })
     );
-    dealerBody.position.y = 1;
-    dealerBody.position.z = -2.5;
-    dealerGroup.add(dealerBody);
+    neck.position.y = 1.9;
+    dealerGroup.add(neck);
 
-    const dealerHead = new THREE.Mesh(
-      new THREE.SphereGeometry(0.6, 32, 32),
-      new THREE.MeshStandardMaterial({ color: 0x880000, emissive: 0x220000 })
+    // Skull / Mask Head
+    const headGroup = new THREE.Group();
+    headGroup.position.y = 2.4;
+
+    const skullBase = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.5, 1),
+      new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.3, roughness: 0.7 })
     );
-    dealerHead.position.y = 2.4;
-    dealerHead.position.z = -2.5;
-    dealerGroup.add(dealerHead);
+    skullBase.castShadow = true;
+    headGroup.add(skullBase);
+
+    // Glowing Eyes
+    const eyeGeo = new THREE.PlaneGeometry(0.15, 0.05);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.2, 0.1, 0.46);
+    leftEye.rotation.y = -0.2;
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(0.2, 0.1, 0.46);
+    rightEye.rotation.y = 0.2;
+    headGroup.add(leftEye, rightEye);
+
+    // Jaw
+    const jaw = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 0.3, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0x151515 })
+    );
+    jaw.position.set(0, -0.3, 0.1);
+    headGroup.add(jaw);
+
+    dealerGroup.add(headGroup);
     scene.add(dealerGroup);
 
-    const shotgunGroup = new THREE.Group();
-    const barrel = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.1, 0.1, 3),
-      new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8 })
-    );
-    barrel.rotation.x = Math.PI / 2;
-    shotgunGroup.add(barrel);
-    const stock = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.4, 1.5),
-      new THREE.MeshStandardMaterial({ color: 0x5c4033 })
-    );
-    stock.position.z = 1.5;
-    shotgunGroup.add(stock);
-    shotgunGroup.position.y = 0.3;
-    shotgunGroup.rotation.y = Math.PI / 2;
-    scene.add(shotgunGroup);
+    // --- Shotguns ---
+    const createShotgun = () => {
+      const group = new THREE.Group();
+      const gunMetalMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.4 });
+      const woodMat = new THREE.MeshStandardMaterial({ color: 0x3d2314, metalness: 0.1, roughness: 0.8 });
 
-    sceneRef.current = { scene, camera, renderer, dealerHead, shotgunGroup, ambientLight };
+      // Barrel
+      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.5, 12), gunMetalMat);
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.15, 0);
+      barrel.castShadow = true;
+      group.add(barrel);
+
+      // Magazine Tube (under barrel)
+      const magTube = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.8, 12), gunMetalMat);
+      magTube.rotation.x = Math.PI / 2;
+      magTube.position.set(0, 0.05, 0.35);
+      magTube.castShadow = true;
+      group.add(magTube);
+
+      // Pump Handle (Ribbed wood)
+      const pumpHandle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.08, 0.6, 8),
+        woodMat
+      );
+      pumpHandle.rotation.x = Math.PI / 2;
+      pumpHandle.position.set(0, 0.05, 0.2);
+      pumpHandle.castShadow = true;
+      group.add(pumpHandle);
+
+      // Receiver (Body of the gun)
+      const receiver = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.25, 0.8),
+        new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.3 })
+      );
+      receiver.position.set(0, 0.1, 1.5);
+      receiver.castShadow = true;
+      group.add(receiver);
+
+      // Trigger Guard
+      const guard = new THREE.Mesh(
+        new THREE.TorusGeometry(0.06, 0.015, 8, 16, Math.PI),
+        gunMetalMat
+      );
+      guard.rotation.y = Math.PI / 2;
+      guard.position.set(0, -0.05, 1.7);
+      group.add(guard);
+
+      // Stock
+      const stock = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.12, 1.2, 8),
+        woodMat
+      );
+      stock.rotation.x = Math.PI / 2 + 0.1; // Angled down slightly
+      stock.position.set(0, 0.0, 2.4);
+      stock.castShadow = true;
+      group.add(stock);
+
+      return group;
+    };
+
+    const p1Gun = createShotgun();
+    // First person view: bottom right
+    p1Gun.position.set(0.6, 1.5, 3.8);
+    p1Gun.rotation.y = Math.PI; // point away from us
+    p1Gun.rotation.x = -0.1; // point slightly down towards table
+    scene.add(p1Gun);
+
+    const p2Gun = createShotgun();
+    // Opponent view: on the table near dealer, pointing towards us slightly
+    p2Gun.position.set(-1.0, 0.3, -1.0);
+    p2Gun.rotation.y = -0.2;
+    scene.add(p2Gun);
+
+    sceneRef.current = { scene, camera, renderer, dealerHead: headGroup, p1Gun, p2Gun, ambientLight };
+
+    // --- Post-Processing (CRT Effect) ---
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+
+    // Custom CRT Shader
+    const crtShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        time: { value: 0 },
+        resolution: { value: new THREE.Vector2() }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float time;
+        uniform vec2 resolution;
+        varying vec2 vUv;
+
+        // Barrel distortion
+        vec2 barrelDistortion(vec2 coord, float amt) {
+          vec2 cc = coord - 0.5;
+          float dist = dot(cc, cc);
+          return coord + cc * dist * amt;
+        }
+
+        void main() {
+          vec2 uv = barrelDistortion(vUv, 0.15); // Curve screen edges
+
+          // Out of bounds check for curved screen
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+            return;
+          }
+
+          // Chromatic aberration
+          float offset = 0.003;
+          float r = texture2D(tDiffuse, uv + vec2(offset, 0.0)).r;
+          float g = texture2D(tDiffuse, uv).g;
+          float b = texture2D(tDiffuse, uv - vec2(offset, 0.0)).b;
+
+          vec4 texColor = vec4(r, g, b, 1.0);
+
+          // Scanlines
+          float scanline = sin(uv.y * resolution.y * 0.5) * 0.04;
+          texColor.rgb -= scanline;
+
+          // Subtle noise
+          float noise = fract(sin(dot(uv, vec2(12.9898, 78.233)) + time) * 43758.5453) * 0.03;
+          texColor.rgb += noise;
+
+          // Vignette
+          float vignette = uv.x * uv.y * (1.0 - uv.x) * (1.0 - uv.y);
+          vignette = clamp(pow(vignette * 15.0, 0.2), 0.0, 1.0);
+          texColor.rgb *= vignette;
+
+          gl_FragColor = texColor;
+        }
+      `
+    };
+
+    const crtPass = new ShaderPass(
+      new THREE.ShaderMaterial({
+        uniforms: THREE.UniformsUtils.clone(crtShader.uniforms),
+        vertexShader: crtShader.vertexShader,
+        fragmentShader: crtShader.fragmentShader
+      })
+    );
+    composer.addPass(crtPass);
 
     const animate = () => {
       requestAnimationFrame(animate);
-      dealerHead.position.y = 2.4 + Math.sin(Date.now() * 0.001) * 0.05;
-      renderer.render(scene, camera);
+
+      const time = Date.now() * 0.001;
+
+      // Dealer breathing animation
+      dealerGroup.position.y = 0.1 + Math.sin(time * 2) * 0.02;
+      headGroup.rotation.y = Math.sin(time * 0.5) * 0.1;
+      headGroup.rotation.z = Math.cos(time * 0.3) * 0.05;
+
+      // Update shader uniforms
+      if (crtPass.material.uniforms) {
+        crtPass.material.uniforms.time.value = time;
+        crtPass.material.uniforms.resolution.value.set(
+          containerRef.current?.clientWidth || 800,
+          containerRef.current?.clientHeight || 600
+        );
+      }
+
+      composer.render();
     };
     animate();
 
     const handleResize = () => {
       if (!containerRef.current) return;
-      camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight;
+      camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+      renderer.setSize(width, height);
+      composer.setSize(width, height);
     };
     window.addEventListener('resize', handleResize);
 
@@ -196,17 +487,19 @@ export function BuckshotRouletteGame({
       if (containerRef.current && renderer.domElement) {
         containerRef.current.removeChild(renderer.domElement);
       }
+      composer.dispose();
       renderer.dispose();
     };
   }, []);
 
-  const triggerGunEffect = useCallback((isLive: boolean) => {
+  const triggerGunEffect = useCallback((isLive: boolean, isPlayerFiring: boolean = true) => {
     if (!sceneRef.current) return;
-    const { scene, camera, shotgunGroup } = sceneRef.current;
+    const { scene, camera, p1Gun, p2Gun } = sceneRef.current;
+    const activeGun = isPlayerFiring ? p1Gun : p2Gun;
 
     // — Shotgun recoil animation —
     const recoilDistance = isLive ? 0.6 : 0.2;
-    const origZ = shotgunGroup.position.z;
+    const origZ = activeGun.position.z;
     let recoilFrame = 0;
     const recoilFrames = isLive ? 20 : 12;
 
@@ -217,12 +510,15 @@ export function BuckshotRouletteGame({
       const ease = t < 0.3
         ? (t / 0.3) * recoilDistance   // fast backward
         : recoilDistance * (1 - ((t - 0.3) / 0.7)) * Math.cos((t - 0.3) * 4); // spring back
-      shotgunGroup.position.z = origZ - ease;
+
+      // If player is firing, gun recoils towards camera (+Z). If opponent is firing, gun recoils backward (-Z)
+      const directionMult = isPlayerFiring ? 1 : -1;
+      activeGun.position.z = origZ + (ease * directionMult);
 
       if (recoilFrame < recoilFrames) {
         requestAnimationFrame(animateRecoil);
       } else {
-        shotgunGroup.position.z = origZ;
+        activeGun.position.z = origZ;
       }
     };
     requestAnimationFrame(animateRecoil);
@@ -231,10 +527,13 @@ export function BuckshotRouletteGame({
     const flashColor = isLive ? 0xffaa00 : 0x888888;
     const flashIntensity = isLive ? 15 : 4;
     const flash = new THREE.PointLight(flashColor, flashIntensity, isLive ? 8 : 3);
+
+    // Flash origin depends on who is firing
+    const flashOffsetZ = isPlayerFiring ? -2.5 : 2.5;
     flash.position.set(
-      shotgunGroup.position.x,
-      shotgunGroup.position.y + 0.1,
-      shotgunGroup.position.z - 1.5
+      activeGun.position.x,
+      activeGun.position.y + 0.1,
+      activeGun.position.z + flashOffsetZ
     );
     scene.add(flash);
 
@@ -289,13 +588,18 @@ export function BuckshotRouletteGame({
   const flashDealer = useCallback(() => {
     if (!sceneRef.current) return;
     const { dealerHead, ambientLight } = sceneRef.current;
-    const material = dealerHead.material as THREE.MeshStandardMaterial;
 
     // Dealer head knockback + flash red
     const origY = dealerHead.position.y;
     const origZ = dealerHead.position.z;
-    material.color.setHex(0xff2222);
-    material.emissive.setHex(0x660000);
+
+    // If dealerHead is a Group, we need to tint its children
+    dealerHead.traverse((child) => {
+      if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+        child.material.color.setHex(0xff2222);
+        child.material.emissive.setHex(0x660000);
+      }
+    });
     ambientLight.intensity = 2.5;
 
     // Knockback animation
@@ -313,8 +617,14 @@ export function BuckshotRouletteGame({
       } else {
         dealerHead.position.y = origY;
         dealerHead.position.z = origZ;
-        material.color.setHex(0x880000);
-        material.emissive.setHex(0x220000);
+        dealerHead.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshStandardMaterial) {
+            // Restore original material colors based on what the child is
+            // Skull is 0x0a0a0a, Jaw is 0x151515. We'll approximate a dark return state.
+            child.material.color.setHex(0x111111);
+            child.material.emissive.setHex(0x000000);
+          }
+        });
         ambientLight.intensity = 0.5;
       }
     };
@@ -691,7 +1001,7 @@ export function BuckshotRouletteGame({
       const isLive = await buckshotRouletteService.shootSelf(sessionId, userAddress, signer);
       setLastShotResult({ isLive, target: 'self' });
 
-      triggerGunEffect(isLive);
+      triggerGunEffect(isLive, true); // Player fired
 
       if (isLive) {
         flashScreen();
@@ -735,7 +1045,7 @@ export function BuckshotRouletteGame({
       const isLive = await buckshotRouletteService.shootOpponent(sessionId, userAddress, signer);
       setLastShotResult({ isLive, target: 'opponent' });
 
-      triggerGunEffect(isLive);
+      triggerGunEffect(isLive, true); // Player fired
 
       if (isLive) {
         flashDealer();
@@ -798,7 +1108,7 @@ export function BuckshotRouletteGame({
         if (prev && newPlayerH < prev.player) {
           log('💥 You got shot!');
           setLastShotResult({ isLive: true, target: 'self' });
-          triggerGunEffect(true);
+          triggerGunEffect(true, false); // Opponent fired
           flashScreen();
         }
 
@@ -809,6 +1119,7 @@ export function BuckshotRouletteGame({
           if (prevTurn === game?.turn) {
             // Turn didn't change from our action — opponent did something
             log('💥 Opponent took damage!');
+            triggerGunEffect(true, false); // Opponent fired
             flashDealer();
           }
         }
